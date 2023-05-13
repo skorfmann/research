@@ -26,7 +26,7 @@ struct HttpRequestOptions {
   body: str;
 }
 
-resource Utils {
+class Utils {
   init() {
     this.display.hidden = true;
   }
@@ -57,7 +57,7 @@ struct PostMessageArgs {
   blocks: Array<Json>?;
 }
 
-resource Slack {
+class Slack {
   token: cloud.Secret;
   utils: Utils;
 
@@ -70,7 +70,7 @@ resource Slack {
     let token = this.token.value();
 
     let blocks: Json = args.blocks ?? Array<Json> [];
-    let res = this.utils.fetch("https://slack.com/api/chat.postMessage", 
+    let res = this.utils.fetch("https://slack.com/api/chat.postMessage",
       method: "POST",
       headers: {
         "Authorization": "Bearer ${token}",
@@ -84,7 +84,7 @@ resource Slack {
     );
 
     log(Json.stringify(res));
-  }  
+  }
 }
 
 // -------------------------------
@@ -98,7 +98,7 @@ struct GithubRelease {
   url: str;
 }
 
-resource SlackPublisher {
+class SlackPublisher {
   slack: Slack;
   utils: Utils;
   channel: str;
@@ -110,12 +110,12 @@ resource SlackPublisher {
 
   inflight publish(release: GithubRelease) {
     let blocks = MutArray<Json>[];
-    blocks.push(Json { 
-      type: "header", 
-      text: Json { 
-        type: "plain_text", 
+    blocks.push(Json {
+      type: "header",
+      text: Json {
+        type: "plain_text",
         text: "Wing ${release.tag} has been released! :rocket:"
-      } 
+      }
     });
 
     let description = this.utils.slackify_markdown(release.body);
@@ -127,8 +127,9 @@ resource SlackPublisher {
       }
     });
 
+
     this.utils.debug("posting slack message: ${Json.stringify(blocks)}");
-    this.slack.post_message(channel: this.channel, blocks: blocks);
+    this.slack.post_message(channel: this.channel, blocks: blocks.copy());
   }
 }
 
@@ -139,7 +140,7 @@ resource SlackPublisher {
 //   inflight handle(release: GithubRelease);
 // }
 
-resource GithubScanner {
+class GithubScanner {
   api: cloud.Api;
   releases: cloud.Topic;
   utils: Utils;
@@ -155,17 +156,17 @@ resource GithubScanner {
     this.api.post("/payload", inflight (req: cloud.ApiRequest): cloud.ApiResponse => {
       let body = req.body ?? EMPTY_JSON;
 
-      let event_action = str.from_json(body.get("action"));
+      let event_action = str.fromJson(body.get("action"));
       if event_action != "released" {
         let message = "skipping event type with type '${event_action}'";
         utils.debug(message);
         return cloud.ApiResponse {
           status: 200,
-          body: message, 
+          body: message,
         };
       }
 
-      let repo = str.from_json(body.get("repository").get("full_name"));
+      let repo = str.fromJson(body.get("repository").get("full_name"));
       if repo != GITHUB_REPO_FULL {
         let message = "skipping release for repo '${repo}'";
         utils.debug(message);
@@ -176,7 +177,7 @@ resource GithubScanner {
       }
 
       releases.publish(Json.stringify(body));
-      let release_tag = str.from_json(body.get("release").get("tag_name"));
+      let release_tag = str.fromJson(body.get("release").get("tag_name"));
       utils.debug("published release ${release_tag} to topic");
 
       return cloud.ApiResponse {
@@ -187,14 +188,14 @@ resource GithubScanner {
   }
 
   on_release(publisher: SlackPublisher): cloud.Function {
-    return this.releases.on_message(inflight (message: str) => {
+    return this.releases.onMessage(inflight (message: str) => {
       let event = Json.parse(message);
       let release = GithubRelease {
-        title: str.from_json(event.get("release").get("name")),
-        author: str.from_json(event.get("release").get("author").get("login")),
-        tag: str.from_json(event.get("release").get("tag_name")),
-        body: str.from_json(event.get("release").get("body")),
-        url: str.from_json(event.get("release").get("html_url")),
+        title: str.fromJson(event.get("release").get("name")),
+        author: str.fromJson(event.get("release").get("author").get("login")),
+        tag: str.fromJson(event.get("release").get("tag_name")),
+        body: str.fromJson(event.get("release").get("body")),
+        url: str.fromJson(event.get("release").get("html_url")),
       };
       publisher.publish(release);
     });
@@ -222,7 +223,7 @@ new github.repositoryWebhook.RepositoryWebhook(
   repository: GITHUB_REPO,
   configuration: github.repositoryWebhook.RepositoryWebhookConfiguration {
     url: "${scanner.api.url}/payload",
-    content_type: "json",
+    contentType: "json",
     // secret: ... // TODO setup webhook-specific secret
   }
 );
